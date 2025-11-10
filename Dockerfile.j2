@@ -4,8 +4,8 @@
 # https://github.com/Demonslyr/docker-gameserver
 #
 
-FROM docker.atriarch.systems/linuxgsm:{{ distro }}
-LABEL maintainer="Atriarch Systems <postmaster@mail.atriarch.systems>"
+FROM ghcr.io/gameservermanagers/linuxgsm:{{ distro }}
+LABEL maintainer="LinuxGSM <me@danielgibbs.co.uk>"
 ARG SHORTNAME={{ shortname }}
 ENV GAMESERVER={{ shortname }}server
 

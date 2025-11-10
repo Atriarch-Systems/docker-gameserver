@@ -4,15 +4,15 @@
 # https://github.com/Demonslyr/docker-gameserver
 #
 
-FROM docker.atriarch.systems/linuxgsm:ubuntu-2204
-LABEL maintainer="Atriarch Systems <postmaster@mail.atriarch.systems>"
+FROM ghcr.io/gameservermanagers/linuxgsm:ubuntu-24.04
+LABEL maintainer="LinuxGSM <me@danielgibbs.co.uk>"
 ARG SHORTNAME=scpsl
 ENV GAMESERVER=scpslserver
 
 WORKDIR /app
 
 ## Auto install game server requirements
-RUN depshortname=$(curl --connect-timeout 10 -s https://cdn.atriarch.systems/File/cdn-wfe/ab91225aa4ee457899a9e0368e253ebd |awk -v shortname="scpsl" -F, '$1==shortname {$1=""; print $0}') \
+RUN depshortname=$(curl --connect-timeout 10 -s https://raw.githubusercontent.com/GameServerManagers/LinuxGSM/master/lgsm/data/ubuntu-24.04.csv |awk -v shortname="scpsl" -F, '$1==shortname {$1=""; print $0}') \
   && if [ -n "${depshortname}" ]; then \
   echo "**** Install ${depshortname} ****" \
   && apt-get update \

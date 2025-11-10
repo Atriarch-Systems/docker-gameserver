@@ -3,24 +3,22 @@
 <p align="center">
   <a href="https://linuxgsm.com"><img src="https://user-images.githubusercontent.com/4478206/197897104-bb718d2e-09a0-4f83-8e86-c829044750a9.jpg" alt="LinuxGSM"></a>
 <br>
-<a href="https://hub.docker.com/r/gameservermanagers/gameserver"><img src="https://img.shields.io/docker/pulls/gameservermanagers/gameserver.svg?style=flat-square&amp;logo=docker&amp;logoColor=white" alt="Docker Pulls"></a>
-<a href="https://github.com/GameServerManagers/docker-gameserver/actions"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/GameServerManagers/docker-gameserver/docker-publish.yml?style=flat-square"></a>
-<a href="https://www.codacy.com/gh/GameServerManagers/docker-gameserver/dashboard"><img src="https://img.shields.io/codacy/grade/42d400dcdd714ae080d77fcb40d00f1c?style=flat-square&logo=codacy&logoColor=white" alt="Codacy grade"></a>
+<a href="https://github.com/Atriarch-Systems/docker-gameserver/actions"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/Atriarch-Systems/docker-gameserver/docker-publish.yml?style=flat-square"></a>
 <a href="https://developer.valvesoftware.com/wiki/SteamCMD"><img src="https://img.shields.io/badge/SteamCMD-000000?style=flat-square&amp;logo=Steam&amp;logoColor=white" alt="SteamCMD"></a>
-<a href="https://github.com/GameServerManagers/docker-gameserver/blob/main/LICENSE"><img src="https://img.shields.io/github/license/gameservermanagers/docker-gameserver?style=flat-square" alt="MIT License"></a></p>
+<a href="https://github.com/Atriarch-Systems/docker-gameserver/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Atriarch-Systems/docker-gameserver?style=flat-square" alt="MIT License"></a></p>
 
 ## About
 
-LinuxGSM is a command-line tool for quick, simple deployment and management of Linux dedicated game servers. This container image builds weekly and is available on [Docker Hub](https://hub.docker.com/r/gameservermanagers/gameserver) as well as [GitHub Container Registry](https://github.com/GameServerManagers/docker-gameserver/pkgs/container/gameserver).
+LinuxGSM is a command-line tool for quick, simple deployment and management of Linux dedicated game servers. This is a fork maintained by Atriarch Systems. The upstream project is maintained by [GameServerManagers](https://github.com/GameServerManagers/docker-gameserver).
 
 ## Tags
 
-For a list of available game servers visit [linuxgsm.com](https://linuxgsm.com) or the [serverlist.csv](https://github.com/GameServerManagers/LinuxGSM/blob/master/lgsm/data/serverlist.csv). For all tags see the [tags list](https://hub.docker.com/r/gameservermanagers/gameserver/tags) on Docker Hub.
+For a list of available game servers visit [linuxgsm.com](https://linuxgsm.com) or the [serverlist.csv](https://github.com/GameServerManagers/LinuxGSM/blob/master/lgsm/data/serverlist.csv).
 
 ## Usage
 
 ### docker-compose
-Here is an example docker-compose configuration for the "csgoserver" using the image `gameservermanagers/gameserver:csgo`. Please note that the ports may vary depending on the specific game server. More docker-compose examples are available [here](https://github.com/GameServerManagers/docker-gameserver/tree/main/docker-compose).
+Here is an example docker-compose configuration for the "csgoserver". Please note that the ports may vary depending on the specific game server. More docker-compose examples are available [here](https://github.com/Atriarch-Systems/docker-gameserver/tree/main/docker-compose).
 
 ```
 version: '3.4'

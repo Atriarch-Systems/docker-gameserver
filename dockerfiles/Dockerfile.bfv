@@ -4,8 +4,8 @@
 # https://github.com/Demonslyr/docker-gameserver
 #
 
-FROM docker.atriarch.systems/linuxgsm:ubuntu-2204
-LABEL maintainer="Atriarch Systems <postmaster@mail.atriarch.systems>"
+FROM ghcr.io/gameservermanagers/linuxgsm:ubuntu-22.04
+LABEL maintainer="LinuxGSM <me@danielgibbs.co.uk>"
 ARG SHORTNAME=bfv
 ENV GAMESERVER=bfvserver
 
