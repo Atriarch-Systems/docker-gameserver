@@ -1,5 +1,5 @@
 name: Build and Push Game Server Images (Atriarch)
-# Builds and pushes all game server INTERMEDIATE images to Atriarch registry
+# Builds and pushes all game server INTERMEDIATE images to Atriarch Nexus registry
 # These intermediate images are then overlaid with Edge API by Atriarch.GameHosting.Edge workflow
 
 on:
@@ -114,13 +114,6 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build and push intermediate image
         uses: docker/build-push-action@v6
         with:
@@ -130,23 +123,6 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}-intermediate
-            ghcr.io/atriarch-systems/gameserver:${{ matrix.game }}-intermediate
-          build-args: |
-            SHORTNAME=${{ matrix.game }}
-
-  package-cleanup:
-    name: Cleanup Old GitHub Packages
-    needs: build-game
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Delete Package Versions
-        uses: actions/delete-package-versions@v5
-        with:
-          package-name: gameserver
-          package-type: container
-          min-versions-to-keep: 200
-          delete-only-untagged-versions: true
 
   trigger-edge-build:
     name: Trigger Edge API Build
@@ -173,6 +149,5 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Intermediate images pushed to:" >> $GITHUB_STEP_SUMMARY
           echo "- \${{ secrets.DOCKER_REGISTRY }}/gameserver:{game}-intermediate" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/atriarch-systems/gameserver:{game}-intermediate" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Edge API build will be triggered to create final images." >> $GITHUB_STEP_SUMMARY
