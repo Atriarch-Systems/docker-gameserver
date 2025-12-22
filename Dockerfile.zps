@@ -1,0 +1,40 @@
+#
+# LinuxGSM Zombie Panic! Source Dockerfile
+#
+# Original: https://github.com/GameServerManagers/docker-gameserver
+# Fork: https://github.com/Atriarch-Systems/docker-gameserver
+#
+# Original Copyright (c) LinuxGSM <me@danielgibbs.co.uk>
+# Modifications Copyright (c) Atriarch Systems <postmaster@mail.atriarch.systems>
+#
+
+FROM docker.atriarch.systems/linuxgsm:ubuntu-24.04
+
+LABEL maintainer="LinuxGSM <me@danielgibbs.co.uk>"
+LABEL maintainer.fork="Atriarch Systems <postmaster@mail.atriarch.systems>"
+ARG SHORTNAME=zps
+ENV GAMESERVER=zpsserver
+
+WORKDIR /app
+
+## Auto install game server requirements
+## Source: Atriarch-Systems LinuxGSM fork (atriarch branch)
+RUN set -ex && \
+  depshortname=$( \
+    curl --connect-timeout 10 -sf https://raw.githubusercontent.com/Atriarch-Systems/LinuxGSM/atriarch/lgsm/data/ubuntu-24.04.csv | \
+    awk -v shortname="zps" -F, '$1==shortname {$1=""; print $0}' \
+  ) && \
+  if [ -n "${depshortname}" ]; then \
+    echo "**** Install ${depshortname} ****" && \
+    apt-get update && \
+    apt-get install -y ${depshortname} && \
+    apt-get -y autoremove && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
+  fi
+
+HEALTHCHECK --interval=1m --timeout=1m --start-period=2m --retries=1 CMD /app/entrypoint-healthcheck.sh || exit 1
+
+RUN date > /build-time.txt
+
+ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
