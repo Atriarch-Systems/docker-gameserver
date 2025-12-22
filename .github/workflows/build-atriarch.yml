@@ -1,0 +1,161 @@
+name: Build and Push Game Server Images (Atriarch)
+# Builds and pushes all game server images to Atriarch registry
+# Uses Atriarch CDN for dependency data files
+
+on:
+  push:
+    branches: [atriarch]
+    paths:
+      - 'Dockerfile.j2'
+      - 'serverlist.csv'
+      - 'generate_dockerfiles.py'
+  workflow_dispatch:
+    inputs:
+      games:
+        description: 'Comma-separated list of games to build (leave empty for all)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  generate-matrix:
+    name: Generate Build Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: atriarch
+
+      - name: Generate matrix from serverlist.csv
+        id: set-matrix
+        run: |
+          if [ -n "${{ inputs.games }}" ]; then
+            # Use provided games list
+            GAMES=$(echo "${{ inputs.games }}" | tr ',' '\n' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            # Parse serverlist.csv for all games
+            # Format: shortname,gamename,distro
+            GAMES=$(tail -n +2 serverlist.csv | cut -d',' -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          fi
+          echo "matrix={\"game\":$GAMES}" >> $GITHUB_OUTPUT
+          echo "Building games: $GAMES"
+
+  generate-dockerfiles:
+    name: Generate Dockerfiles
+    needs: generate-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: atriarch
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install jinja2
+
+      - name: Generate Dockerfiles
+        run: python generate_dockerfiles.py
+
+      - name: Upload Dockerfiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockerfiles
+          path: dockerfiles/
+          retention-days: 1
+
+  build-game:
+    name: Build ${{ matrix.game }}
+    needs: [generate-matrix, generate-dockerfiles]
+    runs-on: [self-hosted, Linux, X64, amd64, arc-amd64]
+    strategy:
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+      fail-fast: false
+      max-parallel: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: atriarch
+
+      - name: Download Dockerfiles
+        uses: actions/download-artifact@v4
+        with:
+          name: dockerfiles
+          path: dockerfiles/
+
+      - name: Get game info
+        id: game-info
+        run: |
+          # Get distro for this game from serverlist.csv
+          DISTRO=$(grep "^${{ matrix.game }}," serverlist.csv | cut -d',' -f3)
+          if [ -z "$DISTRO" ]; then
+            DISTRO="ubuntu-24.04"
+          fi
+          echo "distro=$DISTRO" >> $GITHUB_OUTPUT
+          echo "Building ${{ matrix.game }} with distro $DISTRO"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Atriarch Registry
+        uses: docker/login-action@v3
+        with:
+          registry: docker.atriarch.systems
+          username: ${{ secrets.ATRIARCH_REGISTRY_USERNAME }}
+          password: ${{ secrets.ATRIARCH_REGISTRY_PASSWORD }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfiles/Dockerfile.${{ matrix.game }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            docker.atriarch.systems/gameserver:${{ matrix.game }}
+            ghcr.io/atriarch-systems/gameserver:${{ matrix.game }}
+          build-args: |
+            SHORTNAME=${{ matrix.game }}
+
+  package-cleanup:
+    name: Cleanup Old GitHub Packages
+    needs: build-game
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Delete Package Versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: gameserver
+          package-type: container
+          min-versions-to-keep: 100
+          delete-only-untagged-versions: true
+
+  summary:
+    name: Build Summary
+    needs: build-game
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Game Server Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Images pushed to:" >> $GITHUB_STEP_SUMMARY
+          echo "- docker.atriarch.systems/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/atriarch-systems/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
