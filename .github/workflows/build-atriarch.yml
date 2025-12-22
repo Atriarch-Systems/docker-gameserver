@@ -156,7 +156,7 @@ jobs:
       - name: Trigger Atriarch.GameHosting.Edge workflow
         uses: peter-evans/repository-dispatch@v3
         with:
-          token: ${{ secrets.EDGE_DISPATCH_TOKEN }}
+          token: ${{ secrets.GITOPS_TOKEN }}
           repository: Atriarch-Systems/Atriarch.GameHosting.Edge
           event-type: gameserver-intermediate-built
           client-payload: '{"games": ${{ needs.generate-matrix.outputs.games-json }}, "run_id": "${{ github.run_id }}"}'
