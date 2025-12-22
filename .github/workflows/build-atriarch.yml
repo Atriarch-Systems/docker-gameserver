@@ -1,6 +1,6 @@
 name: Build and Push Game Server Images (Atriarch)
 # Builds and pushes all game server images to Atriarch registry
-# Uses Atriarch CDN for dependency data files
+# Uses Atriarch CDN for dependency data files with GitHub fallback
 
 on:
   push:
@@ -108,9 +108,9 @@ jobs:
       - name: Login to Atriarch Registry
         uses: docker/login-action@v3
         with:
-          registry: docker.atriarch.systems
-          username: ${{ secrets.ATRIARCH_REGISTRY_USERNAME }}
-          password: ${{ secrets.ATRIARCH_REGISTRY_PASSWORD }}
+          registry: ${{ secrets.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -127,7 +127,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            docker.atriarch.systems/gameserver:${{ matrix.game }}
+            ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}
             ghcr.io/atriarch-systems/gameserver:${{ matrix.game }}
           build-args: |
             SHORTNAME=${{ matrix.game }}
@@ -157,5 +157,5 @@ jobs:
           echo "## Game Server Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Images pushed to:" >> $GITHUB_STEP_SUMMARY
-          echo "- docker.atriarch.systems/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
+          echo "- \${{ secrets.DOCKER_REGISTRY }}/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
           echo "- ghcr.io/atriarch-systems/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
