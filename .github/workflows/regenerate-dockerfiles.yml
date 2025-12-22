@@ -1,0 +1,44 @@
+name: Regenerate Dockerfiles
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_message:
+        description: 'Commit message for the regenerated Dockerfiles'
+        required: false
+        default: 'chore: regenerate Dockerfiles from template'
+  repository_dispatch:
+    types: [regenerate-dockerfiles]
+
+jobs:
+  regenerate:
+    name: Regenerate Dockerfiles
+    runs-on: [self-hosted, Linux, X64, amd64, arc-amd64]
+    steps:
+      - name: Checkout atriarch branch
+        uses: actions/checkout@v4
+        with:
+          ref: atriarch
+          token: ${{ secrets.GITOPS_TOKEN }}
+
+      - name: Install jinjanate
+        run: |
+          pip install jinjanate
+
+      - name: Run generate script
+        run: |
+          chmod +x generate-dockerfiles.sh
+          ./generate-dockerfiles.sh
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add dockerfiles/
+          git add shortnamearray.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "${{ github.event.inputs.commit_message || 'chore: regenerate Dockerfiles from template' }}"
+            git push origin atriarch
+          fi
