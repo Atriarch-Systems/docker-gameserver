@@ -18,13 +18,11 @@ ENV GAMESERVER={{ shortname }}server
 WORKDIR /app
 
 ## Auto install game server requirements
-## Fallback chain: CDN -> Atriarch GitHub fork
+## Source: Atriarch CDN (assets cached from LinuxGSM)
 RUN set -ex && \
   depshortname=$( \
-    ( \
-      curl --connect-timeout 5 -sf https://cdn.atriarch.systems/lgsm/data/{{ distro }}.csv || \
-      curl --connect-timeout 10 -sf https://raw.githubusercontent.com/Atriarch-Systems/LinuxGSM/atriarch/lgsm/data/{{ distro }}.csv \
-    ) | awk -v shortname="{{ shortname }}" -F, '$1==shortname {$1=""; print $0}' \
+    curl --connect-timeout 10 -sf https://cdn.atriarch.systems/lgsm/data/{{ distro }}.csv | \
+    awk -v shortname="{{ shortname }}" -F, '$1==shortname {$1=""; print $0}' \
   ) && \
   if [ -n "${depshortname}" ]; then \
     echo "**** Install ${depshortname} ****" && \
