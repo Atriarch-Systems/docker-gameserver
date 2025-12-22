@@ -1,6 +1,6 @@
 name: Build and Push Game Server Images (Atriarch)
-# Builds and pushes all game server images to Atriarch registry
-# Uses Atriarch CDN for dependency data files with GitHub fallback
+# Builds and pushes all game server INTERMEDIATE images to Atriarch registry
+# These intermediate images are then overlaid with Edge API by Atriarch.GameHosting.Edge workflow
 
 on:
   push:
@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      games-json: ${{ steps.set-matrix.outputs.games-json }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,6 +42,7 @@ jobs:
             GAMES=$(tail -n +2 serverlist.csv | cut -d',' -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')
           fi
           echo "matrix={\"game\":$GAMES}" >> $GITHUB_OUTPUT
+          echo "games-json=$GAMES" >> $GITHUB_OUTPUT
           echo "Building games: $GAMES"
 
   generate-dockerfiles:
@@ -119,7 +121,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push intermediate image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -127,8 +129,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}
-            ghcr.io/atriarch-systems/gameserver:${{ matrix.game }}
+            ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}-intermediate
+            ghcr.io/atriarch-systems/gameserver:${{ matrix.game }}-intermediate
           build-args: |
             SHORTNAME=${{ matrix.game }}
 
@@ -143,8 +145,21 @@ jobs:
         with:
           package-name: gameserver
           package-type: container
-          min-versions-to-keep: 100
+          min-versions-to-keep: 200
           delete-only-untagged-versions: true
+
+  trigger-edge-build:
+    name: Trigger Edge API Build
+    needs: [generate-matrix, build-game]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Atriarch.GameHosting.Edge workflow
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.EDGE_DISPATCH_TOKEN }}
+          repository: Atriarch-Systems/Atriarch.GameHosting.Edge
+          event-type: gameserver-intermediate-built
+          client-payload: '{"games": ${{ needs.generate-matrix.outputs.games-json }}, "run_id": "${{ github.run_id }}"}'
 
   summary:
     name: Build Summary
@@ -154,8 +169,10 @@ jobs:
     steps:
       - name: Summary
         run: |
-          echo "## Game Server Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## Game Server Intermediate Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Images pushed to:" >> $GITHUB_STEP_SUMMARY
-          echo "- \${{ secrets.DOCKER_REGISTRY }}/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
-          echo "- ghcr.io/atriarch-systems/gameserver:{game}" >> $GITHUB_STEP_SUMMARY
+          echo "Intermediate images pushed to:" >> $GITHUB_STEP_SUMMARY
+          echo "- \${{ secrets.DOCKER_REGISTRY }}/gameserver:{game}-intermediate" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/atriarch-systems/gameserver:{game}-intermediate" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Edge API build will be triggered to create final images." >> $GITHUB_STEP_SUMMARY
