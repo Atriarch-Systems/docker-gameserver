@@ -1,4 +1,6 @@
-name: Regenerate Dockerfiles
+name: Regenerate Dockerfiles from Template
+# Regenerates all Dockerfiles from Dockerfile.j2 template and commits them
+# Use this when you update the template or serverlist.csv
 
 on:
   workflow_dispatch:
@@ -7,38 +9,41 @@ on:
         description: 'Commit message for the regenerated Dockerfiles'
         required: false
         default: 'chore: regenerate Dockerfiles from template'
-  repository_dispatch:
-    types: [regenerate-dockerfiles]
+        type: string
 
 jobs:
   regenerate:
     name: Regenerate Dockerfiles
-    runs-on: [self-hosted, Linux, X64, amd64, arc-amd64]
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout atriarch branch
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: atriarch
           token: ${{ secrets.GITOPS_TOKEN }}
 
-      - name: Install jinjanate
-        run: |
-          pip install jinjanate
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Run generate script
-        run: |
-          chmod +x generate-dockerfiles.sh
-          ./generate-dockerfiles.sh
+      - name: Install dependencies
+        run: pip install jinja2
 
-      - name: Commit and push changes
+      - name: Clear existing Dockerfiles
+        run: rm -rf dockerfiles/*
+
+      - name: Generate Dockerfiles
+        run: python generate_dockerfiles.py
+
+      - name: Commit and push
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add dockerfiles/
-          git add shortnamearray.json
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "${{ github.event.inputs.commit_message || 'chore: regenerate Dockerfiles from template' }}"
+            git commit -m "${{ inputs.commit_message }}"
             git push origin atriarch
           fi

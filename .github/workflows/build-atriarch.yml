@@ -6,9 +6,7 @@ on:
   push:
     branches: [atriarch]
     paths:
-      - 'Dockerfile.j2'
-      - 'serverlist.csv'
-      - 'generate_dockerfiles.py'
+      - 'dockerfiles/**'
   workflow_dispatch:
     inputs:
       games:
@@ -38,44 +36,15 @@ jobs:
             GAMES=$(echo "${{ inputs.games }}" | tr ',' '\n' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
             # Parse serverlist.csv for all games
-            # Format: shortname,gamename,distro
             GAMES=$(tail -n +2 serverlist.csv | cut -d',' -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')
           fi
           echo "matrix={\"game\":$GAMES}" >> $GITHUB_OUTPUT
           echo "games-json=$GAMES" >> $GITHUB_OUTPUT
           echo "Building $(echo $GAMES | jq 'length') games"
 
-  generate-dockerfiles:
-    name: Generate Dockerfiles
-    needs: generate-matrix
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: atriarch
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install jinja2
-
-      - name: Generate Dockerfiles
-        run: python generate_dockerfiles.py
-
-      - name: Upload Dockerfiles
-        uses: actions/upload-artifact@v4
-        with:
-          name: dockerfiles
-          path: dockerfiles/
-          retention-days: 1
-
   build-game:
     name: Build ${{ matrix.game }}
-    needs: [generate-matrix, generate-dockerfiles]
+    needs: generate-matrix
     runs-on: [self-hosted, Linux, X64, amd64, arc-amd64]
     strategy:
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
@@ -86,23 +55,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: atriarch
-
-      - name: Download Dockerfiles
-        uses: actions/download-artifact@v4
-        with:
-          name: dockerfiles
-          path: dockerfiles/
-
-      - name: Get game info
-        id: game-info
-        run: |
-          # Get distro for this game from serverlist.csv
-          DISTRO=$(grep "^${{ matrix.game }}," serverlist.csv | cut -d',' -f3)
-          if [ -z "$DISTRO" ]; then
-            DISTRO="ubuntu-24.04"
-          fi
-          echo "distro=$DISTRO" >> $GITHUB_OUTPUT
-          echo "Building ${{ matrix.game }} with distro $DISTRO"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
