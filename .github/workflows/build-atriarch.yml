@@ -121,6 +121,8 @@ jobs:
           file: dockerfiles/Dockerfile.${{ matrix.game }}
           platforms: linux/amd64
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}-intermediate
           cache-from: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gameserver:cache-${{ matrix.game }}
