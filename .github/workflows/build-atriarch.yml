@@ -43,7 +43,7 @@ jobs:
           fi
           echo "matrix={\"game\":$GAMES}" >> $GITHUB_OUTPUT
           echo "games-json=$GAMES" >> $GITHUB_OUTPUT
-          echo "Building games: $GAMES"
+          echo "Building $(echo $GAMES | jq 'length') games"
 
   generate-dockerfiles:
     name: Generate Dockerfiles
@@ -123,6 +123,8 @@ jobs:
           push: true
           tags: |
             ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}-intermediate
+          cache-from: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gameserver:cache-${{ matrix.game }}
+          cache-to: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gameserver:cache-${{ matrix.game }},mode=max
 
   trigger-edge-build:
     name: Trigger Edge API Build
