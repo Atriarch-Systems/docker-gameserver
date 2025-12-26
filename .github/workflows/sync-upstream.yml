@@ -1,12 +1,16 @@
 name: Sync Upstream to Main
-# This action syncs the main branch from upstream GameServerManagers
-# The main branch should always mirror upstream exactly
-# Use merge-to-atriarch.yml to pull changes into the atriarch branch
+# This workflow keeps the 'main' branch as an exact mirror of upstream.
+# We use force-push (git reset --hard) instead of merge because:
+# 1. The 'main' branch should be a pure mirror with no local changes
+# 2. Force-push avoids merge commits that would pollute the history
+# 3. All customizations live on 'atriarch' branch, not 'main'
+# 4. This makes it easy to see exactly what upstream has changed
+#
+# Flow: upstream → main (this workflow) → atriarch (merge-to-atriarch.yml)
 
 on:
   schedule:
-    # Run daily at 2:00 AM UTC
-    - cron: "0 2 * * *"
+    - cron: "0 */6 * * *"  # Run every 6 hours
   workflow_dispatch:
 
 permissions:
@@ -17,7 +21,7 @@ jobs:
     if: github.repository == 'Atriarch-Systems/docker-gameserver'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
@@ -32,22 +36,34 @@ jobs:
       - name: Add upstream remote
         run: |
           git remote add upstream https://github.com/GameServerManagers/docker-gameserver.git || true
-          git fetch upstream
 
-      - name: Sync main branch
-        run: |
-          git checkout main
-          git reset --hard upstream/main
-          git push origin main --force
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fetch upstream
+        run: git fetch upstream
 
       - name: Check for new commits
-        id: check_commits
+        id: check
         run: |
-          git fetch origin atriarch
-          COMMITS_AHEAD=$(git rev-list --count origin/atriarch..main)
-          echo "commits_ahead=$COMMITS_AHEAD" >> $GITHUB_OUTPUT
-          if [ "$COMMITS_AHEAD" -gt "0" ]; then
-            echo "::notice::There are $COMMITS_AHEAD new commits from upstream ready to merge into atriarch"
+          UPSTREAM_SHA=$(git rev-parse upstream/main)
+          LOCAL_SHA=$(git rev-parse HEAD)
+          if [ "$UPSTREAM_SHA" != "$LOCAL_SHA" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            COMMIT_COUNT=$(git rev-list --count HEAD..upstream/main)
+            echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Reset to upstream (force sync)
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          git reset --hard upstream/main
+          git push origin main --force
+
+      - name: Notify about new commits
+        if: steps.check.outputs.has_changes == 'true'
+        run: |
+          echo "::notice::There are ${{ steps.check.outputs.commit_count }} new commits from upstream ready to merge into atriarch"
+
+      - name: No changes
+        if: steps.check.outputs.has_changes == 'false'
+        run: echo "Main branch is already up to date with upstream"
