@@ -1,18 +1,11 @@
 name: Merge Main to Atriarch
-# This workflow merges changes from main (synced from upstream) into the atriarch branch
-# Run this manually when you want to uptake upstream changes
 
 on:
+  workflow_run:
+    workflows: ["Sync Upstream to Main"]
+    types:
+      - completed
   workflow_dispatch:
-    inputs:
-      merge_strategy:
-        description: 'Merge strategy to use'
-        required: true
-        default: 'merge'
-        type: choice
-        options:
-          - merge
-          - rebase
 
 permissions:
   contents: write
@@ -20,9 +13,9 @@ permissions:
 jobs:
   merge-to-atriarch:
     if: github.repository == 'Atriarch-Systems/docker-gameserver'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     steps:
-      - name: Checkout atriarch branch
+      - name: Checkout atriarch
         uses: actions/checkout@v4
         with:
           ref: atriarch
@@ -37,38 +30,25 @@ jobs:
       - name: Fetch main
         run: git fetch origin main
 
-      - name: Show incoming changes
+      - name: Check for new commits
+        id: check
         run: |
-          echo "=== Commits to be merged ==="
-          git log --oneline atriarch..origin/main | head -50
-          echo ""
-          echo "=== Files changed ==="
-          git diff --stat atriarch..origin/main | tail -20
+          MAIN_SHA=$(git rev-parse origin/main)
+          MERGE_BASE=$(git merge-base HEAD origin/main)
+          if [ "$MAIN_SHA" != "$MERGE_BASE" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            COMMIT_COUNT=$(git rev-list --count HEAD..origin/main)
+            echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Merge main into atriarch
-        if: ${{ inputs.merge_strategy == 'merge' }}
+        if: steps.check.outputs.has_changes == 'true'
         run: |
-          git merge origin/main --no-edit -m "chore: merge upstream changes from main"
+          git merge origin/main --no-edit -m "Merge upstream changes from main"
+          git push origin atriarch
 
-      - name: Rebase atriarch onto main
-        if: ${{ inputs.merge_strategy == 'rebase' }}
-        run: |
-          git rebase origin/main
-
-      - name: Push changes
-        run: |
-          if [ "${{ inputs.merge_strategy }}" == "rebase" ]; then
-            git push origin atriarch --force-with-lease
-          else
-            git push origin atriarch
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Summary
-        run: |
-          echo "## Merge Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Strategy: ${{ inputs.merge_strategy }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "The atriarch branch has been updated with the latest upstream changes." >> $GITHUB_STEP_SUMMARY
+      - name: No changes
+        if: steps.check.outputs.has_changes == 'false'
+        run: echo "Atriarch branch is already up to date with main"
