@@ -14,6 +14,9 @@ on:
           - merge
           - rebase
 
+permissions:
+  contents: write
+
 jobs:
   merge-to-atriarch:
     if: github.repository == 'Atriarch-Systems/docker-gameserver'
