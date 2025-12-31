@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Generate python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           cache: "pip"
       - run: pip3 install -r requirements.txt
@@ -31,7 +31,7 @@ jobs:
         run: ./generate-dockerfiles.sh
 
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v5.0.0
         with:
           # Artifact name
           name: Dockerfiles
@@ -46,9 +46,9 @@ jobs:
 
       - id: set-matrix
         run: |
-          shortnamearray=$(cat shortnamearray.json)
+          shortnamearray=$(cat "shortnamearray.json")
           echo "${shortnamearray}"
-          echo -n "matrix=${shortnamearray}" >> $GITHUB_OUTPUT
+          echo -n "matrix=${shortnamearray}" >> "${GITHUB_OUTPUT}"
 
   generate-docker-compose:
     name: Generate docker-compose.yml files
@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           cache: "pip"
       - run: pip3 install -r requirements.txt
@@ -97,7 +97,7 @@ jobs:
         run: rm -rf dockerfiles
 
       - name: Download a Build Artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           # Artifact name
           name: Dockerfiles
@@ -134,7 +134,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: dockerfiles/Dockerfile.${{ matrix.shortname }}
+          file: dockerfiles/Dockerfile-${{ matrix.shortname }}
           platforms: linux/amd64
           push: true
           build-args: |
@@ -179,11 +179,3 @@ jobs:
           package-type: container
           min-versions-to-keep: 1
           delete-only-untagged-versions: true
-
-  workflow-keepalive:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - uses: liskin/gh-workflow-keepalive@v1
