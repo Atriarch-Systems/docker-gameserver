@@ -17,7 +17,7 @@ with open('serverlist.csv', 'r') as f:
             'distro': row['os']
         }
         output = template.render(context)
-        with open(f'dockerfiles/Dockerfile.{row["shortname"]}', 'w') as out:
+        with open(f'dockerfiles/Dockerfile-{row["shortname"]}', 'w') as out:
             out.write(output)
         count += 1
     print(f'Generated {count} Dockerfiles')
