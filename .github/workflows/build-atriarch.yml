@@ -7,6 +7,10 @@ on:
     branches: [atriarch]
     paths:
       - 'dockerfiles/**'
+      - '.github/workflows/build-atriarch.yml'
+      - 'Dockerfile.j2'
+      - 'generate_dockerfiles.py'
+      - 'serverlist.csv'
   workflow_dispatch:
     inputs:
       games:
