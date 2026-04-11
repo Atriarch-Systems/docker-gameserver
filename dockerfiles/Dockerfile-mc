@@ -33,6 +33,17 @@ RUN set -ex && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
   fi
 
+## Force Java 25 for Minecraft.
+## The LinuxGSM dependency CSV lives in another repo, so Docker cache can otherwise
+## preserve an older Java layer even after the upstream dependency changes.
+RUN set -ex && \
+  apt-get update && \
+  apt-get install -y openjdk-25-jre && \
+  update-alternatives --set java /usr/lib/jvm/java-25-openjdk-amd64/bin/java && \
+  apt-get -y autoremove && \
+  apt-get clean && \
+  rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
 HEALTHCHECK --interval=1m --timeout=1m --start-period=2m --retries=1 CMD /app/entrypoint-healthcheck.sh || exit 1
 
 RUN date > /build-time.txt
