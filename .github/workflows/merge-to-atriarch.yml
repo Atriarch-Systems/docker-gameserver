@@ -1,4 +1,10 @@
 name: Merge Main to Atriarch
+# Runs after `Sync Upstream to Main` completes. Merges newly-mirrored upstream
+# commits from `main` into the customization branch `atriarch`.
+#
+# Auth: Uses the `atriarch-fork-sync` GitHub App instead of GITHUB_TOKEN
+# because merges may include changes under .github/workflows/, which the
+# default GITHUB_TOKEN is not permitted to modify.
 
 on:
   workflow_run:
@@ -8,24 +14,31 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read  # App token is used for writes; GITHUB_TOKEN stays read-only
 
 jobs:
   merge-to-atriarch:
     if: github.repository == 'Atriarch-Systems/docker-gameserver'
     runs-on: [self-hosted, linux, arm64]
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SYNC_APP_ID }}
+          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
+
       - name: Checkout atriarch
         uses: actions/checkout@v4
         with:
           ref: atriarch
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "atriarch-fork-sync[bot]"
+          git config user.email "atriarch-fork-sync[bot]@users.noreply.github.com"
 
       - name: Fetch main
         run: git fetch origin main

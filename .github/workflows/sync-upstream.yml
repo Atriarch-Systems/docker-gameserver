@@ -7,6 +7,10 @@ name: Sync Upstream to Main
 # 4. This makes it easy to see exactly what upstream has changed
 #
 # Flow: upstream → main (this workflow) → atriarch (merge-to-atriarch.yml)
+#
+# Auth: Uses the `atriarch-fork-sync` GitHub App instead of GITHUB_TOKEN
+# because pushes may include changes under .github/workflows/, which the
+# default GITHUB_TOKEN is not permitted to modify.
 
 on:
   schedule:
@@ -14,24 +18,31 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read  # App token is used for writes; GITHUB_TOKEN stays read-only
 
 jobs:
   sync-upstream:
     if: github.repository == 'Atriarch-Systems/docker-gameserver'
     runs-on: [self-hosted, linux, arm64]
     steps:
+      - name: Generate app token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.SYNC_APP_ID }}
+          private-key: ${{ secrets.SYNC_APP_PRIVATE_KEY }}
+
       - name: Checkout main
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure Git
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "atriarch-fork-sync[bot]"
+          git config user.email "atriarch-fork-sync[bot]@users.noreply.github.com"
 
       - name: Add upstream remote
         run: |
