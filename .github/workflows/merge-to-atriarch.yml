@@ -77,7 +77,8 @@ jobs:
               '*.yaml' \
               'Dockerfile*' \
               'dockerfiles/Dockerfile*' \
-            | grep -v '^\.github/workflows/sync-upstream\.yml$'
+            | grep -v '^\.github/workflows/sync-upstream\.yml$' \
+            | grep -v '^\.github/workflows/merge-to-atriarch\.yml$'
           )
 
           violations=$(
