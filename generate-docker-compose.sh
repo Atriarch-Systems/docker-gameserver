@@ -1,6 +1,6 @@
 #!/bin/bash
 
-curl -O "https://raw.githubusercontent.com/GameServerManagers/LinuxGSM/master/lgsm/data/serverlist.csv"
+curl -O "https://raw.githubusercontent.com/Atriarch-Systems/LinuxGSM/atriarch/lgsm/data/serverlist.csv"
 
 echo -n "{" > "shortnamearray.json"
 echo -n "\"include\":[" >> "shortnamearray.json"
