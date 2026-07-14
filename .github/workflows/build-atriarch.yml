@@ -22,7 +22,7 @@ on:
 jobs:
   generate-matrix:
     name: Generate Build Matrix
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       games-json: ${{ steps.set-matrix.outputs.games-json }}
@@ -87,7 +87,7 @@ jobs:
   trigger-edge-build:
     name: Trigger Edge API Build
     needs: [generate-matrix, build-game]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     steps:
       - name: Trigger Atriarch.GameHosting.Edge workflow
         uses: peter-evans/repository-dispatch@v3
@@ -100,7 +100,7 @@ jobs:
   summary:
     name: Build Summary
     needs: build-game
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     if: always()
     steps:
       - name: Summary

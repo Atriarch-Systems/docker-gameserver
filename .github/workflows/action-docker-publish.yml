@@ -18,7 +18,7 @@ concurrency:
 jobs:
   generate-dockerfiles:
     name: Generate Dockerfiles
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     permissions:
       contents: write
     outputs:
@@ -67,7 +67,7 @@ jobs:
 
   generate-docker-compose:
     name: Generate docker-compose.yml files
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     needs: generate-dockerfiles
     permissions:
       contents: write
@@ -102,7 +102,7 @@ jobs:
   docker-publish:
     name: Publish Docker Images
     needs: generate-dockerfiles
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, amd64, arc-amd64]
     permissions:
       packages: write
       contents: read
@@ -171,7 +171,7 @@ jobs:
 
   package-cleanup:
     name: Cleanup Old GitHub Packages
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     permissions:
       contents: read
       packages: write
@@ -190,7 +190,7 @@ jobs:
   package-cleanup-2:
     name: Cleanup Old GitHub Packages 2
     needs: package-cleanup
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     permissions:
       contents: read
       packages: write
@@ -209,7 +209,7 @@ jobs:
   package-cleanup-3:
     name: Cleanup Old GitHub Packages 3
     needs: package-cleanup-2
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, arm64]
     permissions:
       contents: read
       packages: write
