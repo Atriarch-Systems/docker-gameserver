@@ -20,7 +20,9 @@ LABEL shortname="atr-rsdw"
 LABEL atriarch.custom="true"
 LABEL atriarch.runtime="linux-native"
 ARG SHORTNAME=atr-rsdw
-ENV GAMESERVER=atrrsdwserver
+# GAMESERVER must equal "{gameCode}server" (= atr-rsdwserver) so the deploy
+# manifest generator's cron/preStop/config-lgsm paths line up with the script.
+ENV GAMESERVER=atr-rsdwserver
 
 WORKDIR /app
 
@@ -39,11 +41,11 @@ RUN dpkg --add-architecture i386 && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Custom RuneScape: Dragonwilds LinuxGSM-compatible wrapper and defaults.
-COPY custom/atr-rsdw/atrrsdwserver /app/atrrsdwserver
-COPY custom/atr-rsdw/config/_default.cfg /app/lgsm/config-default/config-lgsm/atrrsdwserver/_default.cfg
+COPY custom/atr-rsdw/atr-rsdwserver /app/atr-rsdwserver
+COPY custom/atr-rsdw/config/_default.cfg /app/lgsm/config-default/config-lgsm/atr-rsdwserver/_default.cfg
 
-RUN sed -i 's/\r$//' /app/atrrsdwserver && \
-    chmod +x /app/atrrsdwserver && \
+RUN sed -i 's/\r$//' /app/atr-rsdwserver && \
+    chmod +x /app/atr-rsdwserver && \
     mkdir -p /data/serverfiles /data/logs /data/backup
 
 # RuneScape: Dragonwilds game port (UDP). No Steam query port (discovery via EOS).

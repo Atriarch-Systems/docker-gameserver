@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-readonly SELFNAME="atrrsdwserver"
+readonly SELFNAME="atr-rsdwserver"
 readonly GAMENAME="RuneScape: Dragonwilds"
 readonly SHORTNAME="atr-rsdw"
 readonly APPID="4019830"
