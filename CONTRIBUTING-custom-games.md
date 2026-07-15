@@ -61,6 +61,13 @@ Classify each game up front:
 1. `linux-native`
 2. `windows-via-proton`
 
+For `linux-native` (e.g. RuneScape: Dragonwilds `atr-rsdw`) build directly on
+the LinuxGSM base image (`FROM docker.atriarch.systems/linuxgsm:ubuntu-24.04`) —
+it already ships SteamCMD, so **no** Proton/`lgsm-atr-custom-base` is required.
+Add only the game's own runtime libraries (and 32-bit libs for SteamCMD), copy
+the wrapper, and launch the native binary directly. This keeps the image lean
+(no GE-Proton tarball).
+
 For `windows-via-proton` include:
 
 1. `+@sSteamCmdForcePlatformType windows` where required.
@@ -69,8 +76,9 @@ For `windows-via-proton` include:
 
 ## Current Examples
 
-1. Enshrouded: `atr-ensh`
-2. Space Engineers scaffold: `atr-se`
+1. Enshrouded: `atr-ensh` (`windows-via-proton`)
+2. Space Engineers scaffold: `atr-se` (`windows-via-proton`)
+3. RuneScape: Dragonwilds: `atr-rsdw` (`linux-native`)
 
 ## Release Guidance
 

@@ -1,0 +1,243 @@
+#!/bin/bash
+# LinuxGSM-compatible wrapper for RuneScape: Dragonwilds dedicated server (custom, linux-native)
+#
+# Runtime class: linux-native. Jagex ships a native 64-bit Linux dedicated
+# server (Steam app 4019830, "RuneScape: Dragonwilds - Dedicated Server") that
+# downloads anonymously via SteamCMD -- NO Proton/Wine/xvfb required.
+#
+# Notes:
+#   * The operator MUST supply their in-game Player ID as OwnerId (env
+#     RSDW_OWNER_ID) or the server refuses to start. The ID is shown at the
+#     bottom of the in-game Settings menu.
+#   * Server discovery uses Epic Online Services (EOS); there is no Steam query
+#     port -- only the UDP game port (default 7777) is exposed.
+#   * The server rewrites DedicatedServer.ini on shutdown, so we (re)write it
+#     from env before every start.
+
+set -euo pipefail
+
+readonly SELFNAME="atrrsdwserver"
+readonly GAMENAME="RuneScape: Dragonwilds"
+readonly SHORTNAME="atr-rsdw"
+readonly APPID="4019830"
+
+readonly SERVER_ROOT="/data"
+readonly SERVERFILES="${SERVER_ROOT}/serverfiles"
+readonly PIDFILE="${SERVER_ROOT}/.rsdragonwilds.pid"
+readonly LOGFILE="${SERVER_ROOT}/logs/rsdragonwilds-server.log"
+
+# UE5 launcher script + native shipping binary (as shipped inside app 4019830).
+readonly LAUNCHER_SH="${SERVERFILES}/RSDragonwildsServer.sh"
+readonly NATIVE_BIN="${SERVERFILES}/RSDragonwilds/Binaries/Linux/RSDragonwildsServer-Linux-Shipping"
+readonly CONFIG_DIR="${SERVERFILES}/RSDragonwilds/Saved/Config/LinuxServer"
+readonly CONFIG_FILE="${CONFIG_DIR}/DedicatedServer.ini"
+
+readonly DEFAULT_PORT="7777"
+readonly DEFAULT_SERVER_NAME="Atriarch RuneScape Dragonwilds Server"
+readonly DEFAULT_WORLD_NAME="Dragonwilds"
+
+mkdir -p "${SERVERFILES}" "${SERVER_ROOT}/logs" "${SERVER_ROOT}/backup"
+
+get_steamcmd_bin() {
+  if command -v steamcmd >/dev/null 2>&1; then
+    command -v steamcmd
+    return 0
+  fi
+  if [ -x "/usr/lib/games/steam/steamcmd.sh" ]; then
+    echo "/usr/lib/games/steam/steamcmd.sh"
+    return 0
+  fi
+  if [ -x "/home/linuxgsm/.steam/steamcmd/steamcmd.sh" ]; then
+    echo "/home/linuxgsm/.steam/steamcmd/steamcmd.sh"
+    return 0
+  fi
+  echo "SteamCMD executable not found" >&2
+  return 1
+}
+
+get_port()           { echo "${SERVER_PORT:-${port:-$DEFAULT_PORT}}"; }
+get_server_name()    { echo "${SERVER_NAME:-${servername:-$DEFAULT_SERVER_NAME}}"; }
+get_world_name()     { echo "${RSDW_WORLD_NAME:-${WORLD_NAME:-$DEFAULT_WORLD_NAME}}"; }
+get_owner_id()       { echo "${RSDW_OWNER_ID:-${OWNER_ID:-}}"; }
+get_admin_password() { echo "${ADMIN_PASSWORD:-${adminpassword:-}}"; }
+get_world_password() { echo "${WORLD_PASSWORD:-${SERVER_PASSWORD:-${serverpassword:-}}}"; }
+get_public()         { echo "${RSDW_PUBLIC:-1}"; }
+
+write_runtime_config() {
+  local owner_id server_name world_name admin_password world_password public
+  owner_id="$(get_owner_id)"
+  server_name="$(get_server_name)"
+  world_name="$(get_world_name)"
+  admin_password="$(get_admin_password)"
+  world_password="$(get_world_password)"
+  public="$(get_public)"
+
+  if [ -z "${owner_id}" ]; then
+    echo "WARNING: no OwnerId set (RSDW_OWNER_ID). ${GAMENAME} will NOT start until a valid" >&2
+    echo "         in-game Player ID is supplied (bottom of the in-game Settings menu)." >&2
+  fi
+
+  mkdir -p "${CONFIG_DIR}"
+  cat > "${CONFIG_FILE}" <<EOF
+[/Script/Dominion.DedicatedServerSettings]
+OwnerId=${owner_id}
+ServerName=${server_name}
+DefaultWorldName=${world_name}
+AdminPassword=${admin_password}
+WorldPassword=${world_password}
+Public=${public}
+EOF
+}
+
+install_server() {
+  local steamcmd_bin
+  steamcmd_bin="$(get_steamcmd_bin)"
+
+  echo "Installing ${GAMENAME} via SteamCMD (anonymous, app ${APPID})..."
+  "${steamcmd_bin}" \
+    +force_install_dir "${SERVERFILES}" \
+    +login anonymous \
+    +app_update ${APPID} validate \
+    +quit
+
+  if [ ! -x "${LAUNCHER_SH}" ] && [ ! -f "${NATIVE_BIN}" ]; then
+    echo "Install failed: neither ${LAUNCHER_SH} nor ${NATIVE_BIN} was found" >&2
+    return 1
+  fi
+  return 0
+}
+
+ensure_installed() {
+  if [ ! -x "${LAUNCHER_SH}" ] && [ ! -f "${NATIVE_BIN}" ]; then
+    install_server
+  fi
+}
+
+fn_start() {
+  ensure_installed
+
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "${GAMENAME} already running"
+    return 0
+  fi
+
+  write_runtime_config
+
+  local game_port
+  game_port="$(get_port)"
+
+  cd "${SERVERFILES}"
+
+  if [ -x "${LAUNCHER_SH}" ]; then
+    nohup "${LAUNCHER_SH}" -log -Port="${game_port}" >> "${LOGFILE}" 2>&1 &
+  else
+    chmod +x "${NATIVE_BIN}" 2>/dev/null || true
+    nohup "${NATIVE_BIN}" -log -Port="${game_port}" >> "${LOGFILE}" 2>&1 &
+  fi
+
+  echo $! > "${PIDFILE}"
+  echo "${GAMENAME} started (PID: $(cat "${PIDFILE}"), Port: ${game_port}/udp)"
+}
+
+fn_stop() {
+  if [ ! -f "${PIDFILE}" ]; then
+    echo "${GAMENAME} is not running"
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "${PIDFILE}")"
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -TERM "${pid}" || true
+    sleep 5
+    if kill -0 "${pid}" 2>/dev/null; then
+      kill -KILL "${pid}" || true
+    fi
+  fi
+
+  rm -f "${PIDFILE}"
+  echo "${GAMENAME} stopped"
+}
+
+fn_restart() {
+  fn_stop
+  fn_start
+}
+
+fn_status() {
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "${GAMENAME} is running (PID: $(cat "${PIDFILE}"))"
+    return 0
+  fi
+
+  echo "${GAMENAME} is stopped"
+  return 1
+}
+
+fn_details() {
+  echo "Game: ${GAMENAME}"
+  echo "Short Name: ${SHORTNAME}"
+  echo "Server Files: ${SERVERFILES}"
+  echo "Port: $(get_port)/udp (no Steam query port; discovery via EOS)"
+  echo "World Name: $(get_world_name)"
+  if [ -n "$(get_owner_id)" ]; then
+    echo "OwnerId: set"
+  else
+    echo "OwnerId: NOT SET (server will not start)"
+  fi
+  if [ -f "${CONFIG_FILE}" ]; then
+    echo "Config File: ${CONFIG_FILE}"
+  fi
+}
+
+fn_update() {
+  install_server
+  echo "${GAMENAME} updated"
+}
+
+fn_validate() {
+  install_server
+  echo "${GAMENAME} validated"
+}
+
+fn_backup() {
+  local ts out
+  ts="$(date +%Y%m%d-%H%M%S)"
+  out="${SERVER_ROOT}/backup/rsdragonwilds-${ts}.tar.gz"
+  # RSDragonwilds/Saved holds both config and SaveGames; back up the whole tree.
+  tar -czf "${out}" -C "${SERVERFILES}" RSDragonwilds/Saved 2>/dev/null || \
+    tar -czf "${out}" -C "${SERVER_ROOT}" serverfiles
+  echo "Backup created: ${out}"
+}
+
+fn_monitor() {
+  fn_status || fn_start
+}
+
+fn_send() {
+  echo "Console send is not implemented for ${GAMENAME} yet"
+  return 0
+}
+
+case "${1:-}" in
+  "")
+    echo "${SELFNAME}: no command specified, waiting for explicit start"
+    exit 0
+    ;;
+  start|st) fn_start ;;
+  stop|sp) fn_stop ;;
+  restart|r) fn_restart ;;
+  status|s) fn_status ;;
+  details|dt) fn_details ;;
+  update|u) fn_update ;;
+  validate|v) fn_validate ;;
+  install|i) install_server ;;
+  backup|b) fn_backup ;;
+  monitor|m) fn_monitor ;;
+  send) shift; fn_send "$@" ;;
+  *)
+    echo "Usage: ${SELFNAME} {start|stop|restart|status|details|update|validate|install|backup|monitor|send}"
+    exit 1
+    ;;
+esac
