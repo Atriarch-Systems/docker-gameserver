@@ -176,6 +176,14 @@ fn_status() {
 }
 
 fn_details() {
+  # "Status: STARTED|STOPPED" is the authoritative line the Edge API's readiness
+  # probe parses (LinuxGsmService.ParseServerRunning); without it the pod is
+  # treated as not ready and the LB never routes players.
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "Status: STARTED"
+  else
+    echo "Status: STOPPED"
+  fi
   echo "Game: ${GAMENAME}"
   echo "Short Name: ${SHORTNAME}"
   echo "Server Files: ${SERVERFILES}"

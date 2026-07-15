@@ -151,10 +151,28 @@ ensure_installed() {
   fi
 }
 
+ensure_steam_sdk_links() {
+  # Steamworks under Proton loads the LINUX steamclient.so via
+  # ${HOME}/.steam/sdk{64,32}. Without these links the server exits silently
+  # during Init_Steamworks (verified in-container). SteamCMD ships the libs.
+  local steam_root="${HOME:-/data}/.local/share/Steam"
+  if [ ! -d "${steam_root}" ]; then
+    steam_root="/data/.local/share/Steam"
+  fi
+  mkdir -p "${HOME:-/data}/.steam/sdk64" "${HOME:-/data}/.steam/sdk32"
+  if [ -f "${steam_root}/steamcmd/linux64/steamclient.so" ]; then
+    ln -sf "${steam_root}/steamcmd/linux64/steamclient.so" "${HOME:-/data}/.steam/sdk64/steamclient.so"
+  fi
+  if [ -f "${steam_root}/steamcmd/linux32/steamclient.so" ]; then
+    ln -sf "${steam_root}/steamcmd/linux32/steamclient.so" "${HOME:-/data}/.steam/sdk32/steamclient.so"
+  fi
+}
+
 fn_start() {
   local proton_bin
 
   ensure_installed
+  ensure_steam_sdk_links
   proton_bin="$(get_proton_path)"
 
   if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
@@ -217,6 +235,14 @@ fn_status() {
 }
 
 fn_details() {
+  # "Status: STARTED|STOPPED" is the authoritative line the Edge API's readiness
+  # probe parses (LinuxGsmService.ParseServerRunning); without it the pod is
+  # treated as not ready and the LB never routes players.
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "Status: STARTED"
+  else
+    echo "Status: STOPPED"
+  fi
   echo "Game: ${GAMENAME}"
   echo "Short Name: ${SHORTNAME}"
   echo "Server Files: ${SERVERFILES}"
