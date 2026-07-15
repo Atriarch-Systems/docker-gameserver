@@ -19,6 +19,12 @@ on:
         default: ''
         type: string
 
+concurrency:
+  # A newer push to atriarch supersedes an in-flight full-matrix build so two
+  # ~137-job fleets don't contend for the same self-hosted runner pool.
+  group: build-atriarch-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   generate-matrix:
     name: Generate Build Matrix
@@ -87,7 +93,10 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_REGISTRY }}/gameserver:${{ matrix.game }}-intermediate
           cache-from: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gameserver:cache-${{ matrix.game }}
-          cache-to: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gameserver:cache-${{ matrix.game }},mode=max
+          # Native intermediates are single-stage (base + a small apt delta), so
+          # mode=min caches everything that lands in the image without paying the
+          # mode=max round-trip for intermediate/build-only layers there aren't any of.
+          cache-to: type=registry,ref=${{ secrets.DOCKER_REGISTRY }}/gameserver:cache-${{ matrix.game }},mode=min
 
   trigger-edge-build:
     name: Trigger Edge API Build

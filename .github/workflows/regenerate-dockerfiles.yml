@@ -30,12 +30,10 @@ jobs:
       - name: Install dependencies
         run: pip install jinja2
 
-      - name: Clear generated Dockerfiles (preserve hand-authored custom atr-*)
-        # Only native, generator-owned Dockerfiles are wiped. Hand-authored
-        # custom images (Dockerfile-atr-ensh, -atr-se, -atr-rsdw, ...) and the
-        # custom base (Dockerfile-atr-custom-base) are NOT serverlist rows and
-        # would never be recreated, so they must be preserved here.
-        run: find dockerfiles -type f -name 'Dockerfile-*' ! -name 'Dockerfile-atr-*' -delete
+      - name: Clear generated Dockerfiles
+        # dockerfiles/ is 100% generator output; hand-authored custom images live
+        # under custom/{shortname}/Dockerfile, so this wipe is safe by construction.
+        run: rm -rf dockerfiles/*
 
       - name: Generate Dockerfiles
         run: python generate_dockerfiles.py

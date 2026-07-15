@@ -8,9 +8,29 @@ This guide explains how to add unsupported games quickly while keeping maintenan
 2. Keep game wrappers thin and game-specific.
 3. Share dependencies and security patching through one base image.
 
+## Repository Layout
+
+Custom games are self-contained under `custom/{shortname}/` so that the
+generated `dockerfiles/` directory stays 100% generator output (and can be
+regenerated/wiped without ever touching hand-authored files):
+
+```
+custom/
+  _base/Dockerfile              # shared Proton base -> lgsm-atr-custom-base
+  atr-ensh/{Dockerfile,atrenshserver,config/}
+  atr-se/{Dockerfile,atrseserver,config/}
+  atr-rsdw/{Dockerfile,atrrsdwserver,config/}
+dockerfiles/                    # generator output only (native LinuxGSM games)
+```
+
+All Dockerfiles build with `context: .` (repo root), so `COPY custom/...`
+paths work unchanged regardless of where the Dockerfile lives.
+
 ## Shared Base Image Pattern
 
-Use [dockerfiles/Dockerfile-atr-custom-base](dockerfiles/Dockerfile-atr-custom-base) as the parent for all custom game images.
+`windows-via-proton` games use [custom/_base/Dockerfile](custom/_base/Dockerfile)
+(published as `lgsm-atr-custom-base`) as their parent. `linux-native` games skip
+it and build directly on the LinuxGSM base (see Runtime Classification).
 
 Benefits:
 
@@ -22,7 +42,7 @@ Build and publish base first:
 
 ```powershell
 $baseTag = "docker.atriarch.systems/lgsm-atr-custom-base:latest"
-docker build -f dockerfiles/Dockerfile-atr-custom-base -t $baseTag .
+docker build -f custom/_base/Dockerfile -t $baseTag .
 docker push $baseTag
 ```
 
@@ -30,9 +50,12 @@ docker push $baseTag
 
 1. Add wrapper at `custom/{shortname}/{gameservername}`.
 2. Add default config at `custom/{shortname}/config/_default.cfg`.
-3. Add `dockerfiles/Dockerfile-{shortname}` using `FROM ${ATR_CUSTOM_BASE_IMAGE}`.
-4. Register in `serverlist.csv`.
-5. Build and push image (`lgsm-{shortname}`).
+3. Add `custom/{shortname}/Dockerfile`:
+   - `windows-via-proton`: `FROM ${ATR_CUSTOM_BASE_IMAGE}`.
+   - `linux-native`: `FROM docker.atriarch.systems/linuxgsm:{distro}`.
+4. Register in `serverlist.csv` (the `atr-` prefix marks it custom: the
+   generator skips it and the native CI matrix excludes it).
+5. Build and push image (`lgsm-{shortname}`) via the custom CI flow.
 6. Update API requirements/catalog in the control-plane repos.
 7. Validate deploy path and runtime checks in cluster.
 
