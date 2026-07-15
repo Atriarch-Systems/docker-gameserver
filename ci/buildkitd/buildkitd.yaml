@@ -1,0 +1,111 @@
+# Shared, persistent BuildKit daemon for the Atriarch game-server image builds.
+#
+# WHY: build-atriarch.yml / build-custom.yml run on ephemeral self-hosted ARC
+# pods (arc-amd64). docker/setup-buildx-action spins up a fresh, EMPTY buildkitd
+# per job, so there is zero local layer cache between runs -- every one of ~137
+# matrix jobs does full network round-trips. A single long-lived buildkitd with
+# a PVC-backed cache gives all jobs a warm, shared cache and dedupes base-image
+# pulls across parallel builds. No GitHub storage / GitHub-hosted runners used.
+#
+# APPLY:  kubectl apply -f ci/buildkitd/buildkitd.yaml
+# ENABLE: set repo/org Actions variable BUILDKIT_REMOTE_ENDPOINT to
+#         tcp://buildkitd.gh-ci.svc.cluster.local:1234  (the workflows read it).
+#
+# The ARC runner pods must be able to reach this Service (same cluster => yes).
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gh-ci
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: buildkitd-cache
+  namespace: gh-ci
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # Sized for base images + shared layer cache across the game matrix. Tune up
+  # if the cache is evicted too often (buildkit GC keeps it bounded regardless).
+  resources:
+    requests:
+      storage: 100Gi
+  # storageClassName: <your-ssd-class>   # uncomment/set for your cluster
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: buildkitd
+  namespace: gh-ci
+  labels:
+    app: buildkitd
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # RWO PVC -> single writer
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
+    spec:
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:v0.17.2-rootless
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --oci-worker-no-process-sandbox
+          # Rootless buildkit keeps the daemon unprivileged; the two securityCtx
+          # entries below are what rootless needs (no full privileged: true).
+          securityContext:
+            seccompProfile:
+              type: Unconfined
+            runAsUser: 1000
+            runAsGroup: 1000
+          ports:
+            - containerPort: 1234
+          readinessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command: ["buildctl", "debug", "workers"]
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "8"
+              memory: 16Gi
+          volumeMounts:
+            - name: cache
+              mountPath: /home/user/.local/share/buildkit
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: buildkitd-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: buildkitd
+  namespace: gh-ci
+spec:
+  selector:
+    app: buildkitd
+  ports:
+    - name: buildkitd
+      port: 1234
+      targetPort: 1234

@@ -71,7 +71,17 @@ jobs:
         with:
           ref: atriarch
 
-      - name: Set up Docker Buildx
+      # Opt-in shared/persistent BuildKit (see ci/buildkitd/). When the Actions
+      # variable BUILDKIT_REMOTE_ENDPOINT is set, all matrix jobs share one warm,
+      # PVC-backed daemon (no GitHub cache); otherwise fall back to a per-job builder.
+      - name: Set up Docker Buildx (remote/shared)
+        if: vars.BUILDKIT_REMOTE_ENDPOINT != ''
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: remote
+          endpoint: ${{ vars.BUILDKIT_REMOTE_ENDPOINT }}
+      - name: Set up Docker Buildx (local)
+        if: vars.BUILDKIT_REMOTE_ENDPOINT == ''
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Atriarch Registry
