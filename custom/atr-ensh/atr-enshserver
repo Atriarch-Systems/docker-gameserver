@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-readonly SELFNAME="atrenshserver"
+readonly SELFNAME="atr-enshserver"
 readonly GAMENAME="Enshrouded"
 readonly SHORTNAME="atr-ensh"
 readonly SERVER_ROOT="/data"

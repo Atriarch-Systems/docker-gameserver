@@ -1,9 +1,9 @@
 #!/bin/bash
-# LinuxGSM-compatible wrapper for Space Engineers dedicated server (custom scaffold)
+# LinuxGSM-compatible wrapper for Space Engineers dedicated server (custom)
 
 set -euo pipefail
 
-readonly SELFNAME="atrseserver"
+readonly SELFNAME="atr-seserver"
 readonly GAMENAME="Space Engineers"
 readonly SHORTNAME="atr-se"
 readonly SERVER_ROOT="/data"

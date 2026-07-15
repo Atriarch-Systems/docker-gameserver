@@ -100,7 +100,7 @@ For `windows-via-proton` include:
 ## Current Examples
 
 1. Enshrouded: `atr-ensh` (`windows-via-proton`)
-2. Space Engineers scaffold: `atr-se` (`windows-via-proton`)
+2. Space Engineers: `atr-se` (`windows-via-proton`)
 3. RuneScape: Dragonwilds: `atr-rsdw` (`linux-native`)
 
 ## Release Guidance
