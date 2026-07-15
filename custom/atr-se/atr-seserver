@@ -360,6 +360,12 @@ case "${1:-}" in
   backup|b) fn_backup ;;
   monitor|m) fn_monitor ;;
   send) shift; fn_send "$@" ;;
+  # LinuxGSM-dialect commands issued by the base image's entrypoint-user.sh and
+  # the deploy cron; must succeed (or no-op) for clean container startup.
+  auto-install|ai) install_server ;;
+  update-lgsm|ul) echo "${SELFNAME}: update-lgsm is not applicable to custom wrappers" ;;
+  sponsor) echo "${SELFNAME}: custom Atriarch wrapper (no LinuxGSM sponsor hook)" ;;
+  developer) echo "${SELFNAME}: developer mode is not applicable to custom wrappers" ;;
   *)
     echo "Usage: ${SELFNAME} {start|stop|restart|status|details|update|validate|install|backup|monitor|send}"
     exit 1
