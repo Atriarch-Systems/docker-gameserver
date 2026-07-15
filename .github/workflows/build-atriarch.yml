@@ -39,8 +39,13 @@ jobs:
             # Use provided games list
             GAMES=$(echo "${{ inputs.games }}" | tr ',' '\n' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
-            # Parse serverlist.csv for all games
-            GAMES=$(tail -n +2 serverlist.csv | cut -d',' -f1 | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            # Parse serverlist.csv for all NATIVE games. Custom (atr-*) games
+            # ship hand-authored Dockerfiles that build FROM a custom base which
+            # is not yet built in this workflow, so they are excluded from the
+            # automatic matrix and built via the custom flow (see
+            # CONTRIBUTING-custom-games.md). Target them explicitly with the
+            # workflow_dispatch "games" input once their base image exists.
+            GAMES=$(tail -n +2 serverlist.csv | cut -d',' -f1 | grep -v '^atr-' | jq -R -s -c 'split("\n") | map(select(length > 0))')
           fi
           echo "matrix={\"game\":$GAMES}" >> $GITHUB_OUTPUT
           echo "games-json=$GAMES" >> $GITHUB_OUTPUT

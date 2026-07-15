@@ -1,0 +1,367 @@
+#!/bin/bash
+# LinuxGSM-compatible wrapper for Space Engineers dedicated server (custom scaffold)
+
+set -euo pipefail
+
+readonly SELFNAME="atrseserver"
+readonly GAMENAME="Space Engineers"
+readonly SHORTNAME="atr-se"
+readonly SERVER_ROOT="/data"
+readonly SERVERFILES="${SERVER_ROOT}/serverfiles"
+readonly INSTANCE_PATH="${SERVER_ROOT}"
+readonly PIDFILE="${SERVER_ROOT}/.spaceengineers.pid"
+readonly LOGFILE="${SERVER_ROOT}/logs/spaceengineers-server.log"
+readonly CONFIG_FILE="${SERVER_ROOT}/SpaceEngineers-Dedicated.cfg"
+readonly EXECUTABLE="${SERVERFILES}/DedicatedServer64/SpaceEngineersDedicated.exe"
+readonly VC_REDIST_URL="https://aka.ms/vs/17/release/vc_redist.x64.exe"
+readonly VC_REDIST_MARKER="${SERVER_ROOT}/.vcredist_x64_installed"
+readonly APPID="298740"
+readonly DEFAULT_PORT="27016"
+readonly DEFAULT_QUERY_PORT="27016"
+readonly DEFAULT_WORLD_NAME="World"
+readonly DEFAULT_SERVER_NAME="Atriarch Space Engineers"
+
+mkdir -p "${SERVERFILES}" "${SERVER_ROOT}/logs" "${SERVER_ROOT}/backup" "${SERVER_ROOT}/compatdata/${APPID}" "${SERVER_ROOT}/worlds"
+
+get_steamcmd_bin() {
+  if command -v steamcmd >/dev/null 2>&1; then
+    command -v steamcmd
+    return 0
+  fi
+
+  if [ -x "/usr/lib/games/steam/steamcmd.sh" ]; then
+    echo "/usr/lib/games/steam/steamcmd.sh"
+    return 0
+  fi
+
+  echo "SteamCMD executable not found"
+  return 1
+}
+
+get_proton_path() {
+  if [ -n "${PROTON_PATH:-}" ] && [ -x "${PROTON_PATH}" ]; then
+    echo "${PROTON_PATH}"
+    return 0
+  fi
+
+  local candidate
+  candidate="$(find /opt/proton -maxdepth 3 -type f -name proton 2>/dev/null | head -n 1 || true)"
+  if [ -n "${candidate}" ] && [ -x "${candidate}" ]; then
+    echo "${candidate}"
+    return 0
+  fi
+
+  echo "Proton executable not found"
+  return 1
+}
+
+get_port() {
+  echo "${SERVER_PORT:-${port:-$DEFAULT_PORT}}"
+}
+
+get_query_port() {
+  echo "${QUERY_PORT:-${queryport:-$DEFAULT_QUERY_PORT}}"
+}
+
+get_world_name() {
+  echo "${SE_WORLD_NAME:-${WORLD_NAME:-$DEFAULT_WORLD_NAME}}"
+}
+
+get_server_name() {
+  echo "${SE_SERVER_NAME:-${SERVER_NAME:-$DEFAULT_SERVER_NAME}}"
+}
+
+get_max_players() {
+  echo "${MAX_PLAYERS:-4}"
+}
+
+install_server() {
+  local steamcmd_bin
+  steamcmd_bin="$(get_steamcmd_bin)"
+
+  echo "Installing ${GAMENAME} via SteamCMD (anonymous)..."
+  # Warm app metadata to avoid intermittent "Missing configuration" from SteamCMD.
+  "${steamcmd_bin}" \
+    +login anonymous \
+    +app_info_update 1 \
+    +app_info_print ${APPID} \
+    +quit >/dev/null 2>&1 || true
+
+  if [ "${STEAMCMD_FORCE_WINDOWS:-no}" = "yes" ]; then
+    "${steamcmd_bin}" \
+      +@sSteamCmdForcePlatformType windows \
+      +force_install_dir "${SERVERFILES}" \
+      +login anonymous \
+      +app_info_update 1 \
+      +app_update ${APPID} \
+      +quit
+  else
+    "${steamcmd_bin}" \
+      +force_install_dir "${SERVERFILES}" \
+      +login anonymous \
+      +app_info_update 1 \
+      +app_update ${APPID} \
+      +quit
+  fi
+
+  if [ ! -f "${EXECUTABLE}" ]; then
+    echo "Install failed: ${EXECUTABLE} not found"
+    return 1
+  fi
+
+  return 0
+}
+
+ensure_installed() {
+  if [ ! -f "${EXECUTABLE}" ]; then
+    install_server
+  fi
+}
+
+ensure_dotnet_runtime_netstandard() {
+  local netstandard_dll="${SERVERFILES}/DedicatedServer64/netstandard.dll"
+  local compat_prefix="${STEAM_COMPAT_DATA_PATH:-${SERVER_ROOT}/compatdata/${APPID}}/pfx"
+
+  if [ -f "${netstandard_dll}" ] && grep -a -q "ContractReferenceAssemblyAttribute" "${netstandard_dll}" 2>/dev/null; then
+    mv -f "${netstandard_dll}" "${netstandard_dll}.reference"
+  fi
+
+  if [ -f "${netstandard_dll}" ]; then
+    return 0
+  fi
+
+  local candidate
+  for candidate in \
+    "${compat_prefix}/drive_c/windows/Microsoft.NET/assembly/GAC_MSIL/netstandard/v4.0_2.0.0.0__cc7b13ffcd2ddd51/netstandard.dll" \
+    "${compat_prefix}/drive_c/windows/Microsoft.NET/Framework64/v4.0.30319/netstandard.dll" \
+    "${compat_prefix}/drive_c/windows/Microsoft.NET/Framework/v4.0.30319/netstandard.dll"; do
+    if [ -f "${candidate}" ]; then
+      cp -f "${candidate}" "${netstandard_dll}"
+      break
+    fi
+  done
+}
+
+seed_world_and_config() {
+  local world_name
+  local server_name
+  local game_port
+  local query_port
+  local max_players
+  local world_dir
+
+  world_name="$(get_world_name)"
+  server_name="$(get_server_name)"
+  game_port="$(get_port)"
+  query_port="$(get_query_port)"
+  max_players="$(get_max_players)"
+  world_dir="${SERVER_ROOT}/worlds/${world_name}"
+
+  if [ ! -f "${world_dir}/SANDBOX_0_0_0_.sbs" ] && [ -d "${SERVERFILES}/Content/CustomWorlds/Crashed Red Ship" ]; then
+    mkdir -p "${world_dir}"
+    cp -a "${SERVERFILES}/Content/CustomWorlds/Crashed Red Ship/." "${world_dir}/"
+  fi
+
+  cat > "${CONFIG_FILE}" <<CFG
+<?xml version="1.0"?>
+<MyConfigDedicated>
+  <SessionName>${world_name}</SessionName>
+  <ServerName>${server_name}</ServerName>
+  <ServerPort>${game_port}</ServerPort>
+  <SteamPort>${query_port}</SteamPort>
+  <WorldName>${world_name}</WorldName>
+  <LoadWorld>${world_dir}</LoadWorld>
+  <ScenarioType>CustomWorld</ScenarioType>
+  <PauseGameWhenEmpty>false</PauseGameWhenEmpty>
+  <MaxPlayers>${max_players}</MaxPlayers>
+</MyConfigDedicated>
+CFG
+}
+
+copy_steam_runtime_dlls() {
+  local src
+  local dst="${SERVERFILES}/DedicatedServer64"
+  local dll
+
+  for dll in steamclient.dll steamclient64.dll tier0_s.dll tier0_s64.dll vstdlib_s.dll vstdlib_s64.dll; do
+    src="${SERVERFILES}/${dll}"
+    if [ -f "${src}" ] && [ -d "${dst}" ]; then
+      cp -f "${src}" "${dst}/"
+    fi
+  done
+}
+
+ensure_vcruntime() {
+  local proton_bin="$1"
+  local compat_prefix="${STEAM_COMPAT_DATA_PATH:-${SERVER_ROOT}/compatdata/${APPID}}/pfx"
+
+  if [ -f "${VC_REDIST_MARKER}" ] || grep -a -q "Microsoft Visual C++ 2015-2022 Redistributable (x64)" "${compat_prefix}/system.reg" 2>/dev/null; then
+    touch "${VC_REDIST_MARKER}"
+    return 0
+  fi
+
+  echo "Installing VC++ runtime into Proton prefix..."
+  mkdir -p "${SERVER_ROOT}/downloads"
+  local redist_exe="${SERVER_ROOT}/downloads/vc_redist.x64.exe"
+
+  if [ ! -f "${redist_exe}" ]; then
+    curl -fL --retry 3 --retry-all-errors "${VC_REDIST_URL}" -o "${redist_exe}"
+  fi
+
+  # Prime the prefix before running the redistributable installer.
+  "${proton_bin}" waitforexitandrun cmd /c echo "prefix initialized" >/dev/null 2>&1 || true
+
+  if command -v xvfb-run >/dev/null 2>&1; then
+    if xvfb-run -a --server-args="-screen 0 1024x768x16" "${proton_bin}" waitforexitandrun "${redist_exe}" /install /quiet /norestart; then
+      touch "${VC_REDIST_MARKER}"
+      return 0
+    fi
+  elif "${proton_bin}" waitforexitandrun "${redist_exe}" /install /quiet /norestart; then
+    touch "${VC_REDIST_MARKER}"
+    return 0
+  fi
+
+  echo "Warning: VC++ runtime install returned a non-zero exit code"
+  return 1
+}
+
+fn_start() {
+  local proton_bin
+  local -a launch_cmd
+
+  ensure_installed
+  proton_bin="$(get_proton_path)"
+
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "${GAMENAME} already running"
+    return 0
+  fi
+
+  local game_port
+  local query_port
+  game_port="$(get_port)"
+  query_port="$(get_query_port)"
+
+  export STEAM_COMPAT_CLIENT_INSTALL_PATH="${STEAM_COMPAT_CLIENT_INSTALL_PATH:-/usr/lib/games/steam}"
+  export STEAM_COMPAT_DATA_PATH="${STEAM_COMPAT_DATA_PATH:-${SERVER_ROOT}/compatdata/${APPID}}"
+  export WINEDEBUG="-all"
+
+  ensure_vcruntime "${proton_bin}" || true
+  ensure_dotnet_runtime_netstandard || true
+  copy_steam_runtime_dlls || true
+  seed_world_and_config
+
+  if command -v xvfb-run >/dev/null 2>&1; then
+    launch_cmd=(xvfb-run -a --server-args="-screen 0 1024x768x24" "${proton_bin}" waitforexitandrun "${EXECUTABLE}")
+  else
+    launch_cmd=("${proton_bin}" waitforexitandrun "${EXECUTABLE}")
+  fi
+
+  cd "${SERVERFILES}"
+
+  nohup "${launch_cmd[@]}" \
+    -noconsole -path "${INSTANCE_PATH}" -config "${CONFIG_FILE}" \
+    >> "${LOGFILE}" 2>&1 &
+
+  echo $! > "${PIDFILE}"
+  echo "${GAMENAME} started (PID: $(cat "${PIDFILE}"), Port: ${game_port}, Query: ${query_port})"
+}
+
+fn_stop() {
+  if [ ! -f "${PIDFILE}" ]; then
+    echo "${GAMENAME} is not running"
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "${PIDFILE}")"
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -TERM "${pid}" || true
+    sleep 3
+    if kill -0 "${pid}" 2>/dev/null; then
+      kill -KILL "${pid}" || true
+    fi
+  fi
+
+  rm -f "${PIDFILE}"
+  echo "${GAMENAME} stopped"
+}
+
+fn_restart() {
+  fn_stop
+  fn_start
+}
+
+fn_status() {
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "${GAMENAME} is running (PID: $(cat "${PIDFILE}"))"
+    return 0
+  fi
+
+  echo "${GAMENAME} is stopped"
+  return 1
+}
+
+fn_details() {
+  echo "Game: ${GAMENAME}"
+  echo "Short Name: ${SHORTNAME}"
+  echo "Server Files: ${SERVERFILES}"
+  echo "Port: $(get_port)"
+  echo "Query Port: $(get_query_port)"
+  if [ -f "${CONFIG_FILE}" ]; then
+    echo "Config File: ${CONFIG_FILE}"
+  else
+    echo "Config File: not present (server will use generated/default runtime config)"
+  fi
+  echo "World Name: $(get_world_name)"
+}
+
+fn_update() {
+  install_server
+  echo "${GAMENAME} updated"
+}
+
+fn_validate() {
+  install_server
+  echo "${GAMENAME} validated"
+}
+
+fn_backup() {
+  local ts
+  ts="$(date +%Y%m%d-%H%M%S)"
+  local out="${SERVER_ROOT}/backup/spaceengineers-${ts}.tar.gz"
+  tar -czf "${out}" -C "${SERVER_ROOT}" serverfiles
+  echo "Backup created: ${out}"
+}
+
+fn_monitor() {
+  fn_status || fn_start
+}
+
+fn_send() {
+  echo "Console send is not implemented for ${GAMENAME} yet"
+  return 0
+}
+
+case "${1:-}" in
+  "")
+    echo "${SELFNAME}: no command specified, waiting for explicit start"
+    exit 0
+    ;;
+  start|st) fn_start ;;
+  stop|sp) fn_stop ;;
+  restart|r) fn_restart ;;
+  status|s) fn_status ;;
+  details|dt) fn_details ;;
+  update|u) fn_update ;;
+  validate|v) fn_validate ;;
+  install|i) install_server ;;
+  backup|b) fn_backup ;;
+  monitor|m) fn_monitor ;;
+  send) shift; fn_send "$@" ;;
+  *)
+    echo "Usage: ${SELFNAME} {start|stop|restart|status|details|update|validate|install|backup|monitor|send}"
+    exit 1
+    ;;
+esac

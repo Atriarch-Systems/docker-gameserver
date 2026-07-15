@@ -1,0 +1,277 @@
+#!/bin/bash
+# LinuxGSM-compatible wrapper for Enshrouded dedicated server (custom)
+
+set -euo pipefail
+
+readonly SELFNAME="atrenshserver"
+readonly GAMENAME="Enshrouded"
+readonly SHORTNAME="atr-ensh"
+readonly SERVER_ROOT="/data"
+readonly SERVERFILES="${SERVER_ROOT}/serverfiles"
+readonly PIDFILE="${SERVER_ROOT}/.enshrouded.pid"
+readonly LOGFILE="${SERVER_ROOT}/logs/enshrouded-server.log"
+readonly CONFIG_FILE="${SERVERFILES}/enshrouded_server.json"
+readonly APPID="2278520"
+readonly DEFAULT_PORT="15636"
+readonly DEFAULT_QUERY_PORT="15637"
+readonly DEFAULT_BIND_IP="0.0.0.0"
+
+mkdir -p "${SERVERFILES}" "${SERVER_ROOT}/logs" "${SERVER_ROOT}/backup" "${SERVER_ROOT}/compatdata/${APPID}"
+
+get_steamcmd_bin() {
+  if command -v steamcmd >/dev/null 2>&1; then
+    command -v steamcmd
+    return 0
+  fi
+
+  if [ -x "/usr/lib/games/steam/steamcmd.sh" ]; then
+    echo "/usr/lib/games/steam/steamcmd.sh"
+    return 0
+  fi
+
+  echo "SteamCMD executable not found"
+  return 1
+}
+
+get_proton_path() {
+  if [ -n "${PROTON_PATH:-}" ] && [ -x "${PROTON_PATH}" ]; then
+    echo "${PROTON_PATH}"
+    return 0
+  fi
+
+  local candidate
+  candidate="$(find /opt/proton -maxdepth 3 -type f -name proton 2>/dev/null | head -n 1 || true)"
+  if [ -n "${candidate}" ] && [ -x "${candidate}" ]; then
+    echo "${candidate}"
+    return 0
+  fi
+
+  echo "Proton executable not found"
+  return 1
+}
+
+get_port() {
+  echo "${SERVER_PORT:-${port:-$DEFAULT_PORT}}"
+}
+
+get_query_port() {
+  echo "${QUERY_PORT:-${queryport:-$DEFAULT_QUERY_PORT}}"
+}
+
+get_bind_ip() {
+  echo "${SERVER_BIND_IP:-${SERVER_IP:-$DEFAULT_BIND_IP}}"
+}
+
+get_slot_count() {
+  echo "${MAX_PLAYERS:-${maxplayers:-16}}"
+}
+
+get_server_name() {
+  echo "${SERVER_NAME:-${servername:-Atriarch Enshrouded Server}}"
+}
+
+get_server_password() {
+  echo "${ADMIN_PASSWORD:-${SERVER_PASSWORD:-${serverpassword:-}}}"
+}
+
+write_runtime_config() {
+  local game_port
+  local query_port
+  local bind_ip
+  local server_name
+  local slot_count
+  local server_password
+
+  game_port="$(get_port)"
+  query_port="$(get_query_port)"
+  bind_ip="$(get_bind_ip)"
+  server_name="$(get_server_name)"
+  slot_count="$(get_slot_count)"
+  server_password="$(get_server_password)"
+
+  cat > "${CONFIG_FILE}" <<EOF
+{
+  "name": "${server_name}",
+  "saveDirectory": "./savegame",
+  "logDirectory": "./logs",
+  "ip": "${bind_ip}",
+  "queryPort": ${query_port},
+  "slotCount": ${slot_count},
+  "gameSettingsPreset": "Default",
+  "userGroups": [
+    {
+      "name": "default",
+      "password": "${server_password}",
+      "canKickBan": true,
+      "canAccessInventories": true,
+      "canEditBase": true,
+      "canExtendBase": true,
+      "reservedSlots": 0
+    }
+  ]
+}
+EOF
+
+  # Keep legacy fields for tools that expect these values.
+  export PORT="${game_port}"
+  export QUERY_PORT="${query_port}"
+}
+
+install_server() {
+  local steamcmd_bin
+  steamcmd_bin="$(get_steamcmd_bin)"
+
+  echo "Installing ${GAMENAME} via SteamCMD (anonymous)..."
+  "${steamcmd_bin}" \
+    +@sSteamCmdForcePlatformType windows \
+    +force_install_dir "${SERVERFILES}" \
+    +login anonymous \
+    +app_update ${APPID} validate \
+    +quit
+
+  if [ ! -f "${SERVERFILES}/enshrouded_server.exe" ]; then
+    echo "Install failed: enshrouded_server.exe not found"
+    return 1
+  fi
+
+  if [ ! -f "${SERVERFILES}/enshrouded_server.json" ]; then
+    cp /app/config-default/enshrouded_server.json "${CONFIG_FILE}"
+  fi
+
+  write_runtime_config
+
+  return 0
+}
+
+ensure_installed() {
+  if [ ! -f "${SERVERFILES}/enshrouded_server.exe" ]; then
+    install_server
+  else
+    write_runtime_config
+  fi
+}
+
+fn_start() {
+  local proton_bin
+
+  ensure_installed
+  proton_bin="$(get_proton_path)"
+
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "${GAMENAME} already running"
+    return 0
+  fi
+
+  local game_port
+  local query_port
+  game_port="$(get_port)"
+  query_port="$(get_query_port)"
+
+  export STEAM_COMPAT_CLIENT_INSTALL_PATH="${STEAM_COMPAT_CLIENT_INSTALL_PATH:-/usr/lib/games/steam}"
+  export STEAM_COMPAT_DATA_PATH="${STEAM_COMPAT_DATA_PATH:-${SERVER_ROOT}/compatdata/${APPID}}"
+  export WINEDEBUG="-all"
+
+  cd "${SERVERFILES}"
+
+  nohup "${proton_bin}" run "${SERVERFILES}/enshrouded_server.exe" \
+    >> "${LOGFILE}" 2>&1 &
+
+  echo $! > "${PIDFILE}"
+  echo "${GAMENAME} started (PID: $(cat "${PIDFILE}"), Port: ${game_port}, Query: ${query_port})"
+}
+
+fn_stop() {
+  if [ ! -f "${PIDFILE}" ]; then
+    echo "${GAMENAME} is not running"
+    return 0
+  fi
+
+  local pid
+  pid="$(cat "${PIDFILE}")"
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -TERM "${pid}" || true
+    sleep 3
+    if kill -0 "${pid}" 2>/dev/null; then
+      kill -KILL "${pid}" || true
+    fi
+  fi
+
+  rm -f "${PIDFILE}"
+  echo "${GAMENAME} stopped"
+}
+
+fn_restart() {
+  fn_stop
+  fn_start
+}
+
+fn_status() {
+  if [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; then
+    echo "${GAMENAME} is running (PID: $(cat "${PIDFILE}"))"
+    return 0
+  fi
+
+  echo "${GAMENAME} is stopped"
+  return 1
+}
+
+fn_details() {
+  echo "Game: ${GAMENAME}"
+  echo "Short Name: ${SHORTNAME}"
+  echo "Server Files: ${SERVERFILES}"
+  echo "Port: $(get_port)"
+  echo "Query Port: $(get_query_port)"
+  if [ -f "${LOGFILE}" ]; then
+    echo "Log File: ${LOGFILE}"
+  fi
+}
+
+fn_update() {
+  install_server
+  echo "${GAMENAME} updated"
+}
+
+fn_validate() {
+  install_server
+  echo "${GAMENAME} validated"
+}
+
+fn_backup() {
+  local ts
+  ts="$(date +%Y%m%d-%H%M%S)"
+  local out="${SERVER_ROOT}/backup/enshrouded-${ts}.tar.gz"
+  tar -czf "${out}" -C "${SERVER_ROOT}" serverfiles
+  echo "Backup created: ${out}"
+}
+
+fn_monitor() {
+  fn_status || fn_start
+}
+
+fn_send() {
+  echo "Console send is not implemented for ${GAMENAME} yet"
+  return 0
+}
+
+case "${1:-}" in
+  "")
+    echo "${SELFNAME}: no command specified, waiting for explicit start"
+    exit 0
+    ;;
+  start|st) fn_start ;;
+  stop|sp) fn_stop ;;
+  restart|r) fn_restart ;;
+  status|s) fn_status ;;
+  details|dt) fn_details ;;
+  update|u) fn_update ;;
+  validate|v) fn_validate ;;
+  install|i) install_server ;;
+  backup|b) fn_backup ;;
+  monitor|m) fn_monitor ;;
+  send) shift; fn_send "$@" ;;
+  *)
+    echo "Usage: ${SELFNAME} {start|stop|restart|status|details|update|validate|install|backup|monitor|send}"
+    exit 1
+    ;;
+esac

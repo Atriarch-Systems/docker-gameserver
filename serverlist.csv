@@ -6,6 +6,8 @@ ark,arkserver,ARK: Survival Evolved,ubuntu-24.04
 arma3,arma3server,ARMA 3,ubuntu-24.04
 armar,armarserver,Arma Reforger,ubuntu-24.04
 ats,atsserver,American Truck Simulator,ubuntu-24.04
+atr-ensh,atrenshserver,Enshrouded Dedicated Server (Custom),ubuntu-24.04
+atr-se,atrseserver,Space Engineers Dedicated Server (Custom Scaffold),ubuntu-24.04
 av,avserver,Avorion,ubuntu-24.04
 bb,bbserver,BrainBread,ubuntu-24.04
 bb2,bb2server,BrainBread 2,ubuntu-24.04

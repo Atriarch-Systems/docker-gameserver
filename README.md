@@ -11,6 +11,8 @@
 
 LinuxGSM is a command-line tool for quick, simple deployment and management of Linux dedicated game servers. This is a fork maintained by Atriarch Systems. The upstream project is maintained by [GameServerManagers](https://github.com/GameServerManagers/docker-gameserver).
 
+For custom, non-LGSM-supported games, see [CONTRIBUTING-custom-games.md](CONTRIBUTING-custom-games.md).
+
 ## Tags
 
 For a list of available game servers visit [linuxgsm.com](https://linuxgsm.com) or the [serverlist.csv](https://github.com/Atriarch-Systems/LinuxGSM/blob/master/lgsm/data/serverlist.csv).

@@ -1,0 +1,46 @@
+#
+# Atriarch Custom Game Runtime Base Image
+#
+# Shared base for non-LGSM-supported custom games using SteamCMD + Proton.
+# Child images should only add game-specific wrapper scripts and defaults.
+#
+
+ARG LGSM_BASE_IMAGE=gameservermanagers/linuxgsm:ubuntu-24.04
+FROM ${LGSM_BASE_IMAGE}
+
+LABEL maintainer.fork="Atriarch Systems <postmaster@mail.atriarch.systems>"
+LABEL image.role="atr-custom-base"
+ARG GE_PROTON_VERSION=10-26
+
+ENV PROTON_ROOT=/opt/proton
+ENV PROTON_PATH=/opt/proton/GE-Proton${GE_PROTON_VERSION}/proton
+ENV STEAM_COMPAT_CLIENT_INSTALL_PATH=/usr/lib/games/steam
+
+WORKDIR /app
+
+RUN dpkg --add-architecture i386 && \
+                apt-get update && \
+                apt-get install --no-install-recommends -y \
+            ca-certificates \
+            curl \
+            dbus \
+                        fontconfig \
+                        fonts-liberation \
+            jq \
+            lib32gcc-s1 \
+                        libfontconfig1:i386 \
+            libfreetype6 \
+                        libfreetype6:i386 \
+            python3 \
+                        xauth \
+                        xvfb \
+            winbind && \
+        rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p ${PROTON_ROOT} && \
+        curl -fsSL "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/GE-Proton${GE_PROTON_VERSION}/GE-Proton${GE_PROTON_VERSION}.tar.gz" | tar -xz -C ${PROTON_ROOT}
+
+# Child images will set game-specific GAMESERVER and STEAM_COMPAT_DATA_PATH.
+RUN date > /build-time.txt
+
+ENTRYPOINT ["/bin/bash", "./entrypoint.sh"]
