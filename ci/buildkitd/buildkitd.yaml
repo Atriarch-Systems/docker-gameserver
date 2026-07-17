@@ -31,7 +31,9 @@ spec:
   resources:
     requests:
       storage: 100Gi
-  # storageClassName: <your-ssd-class>   # uncomment/set for your cluster
+  # SSD-backed: the cluster default (truenas-hdd-delete) is too slow for a
+  # BuildKit layer cache.
+  storageClassName: truenas-ssd
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -103,6 +105,11 @@ metadata:
   name: buildkitd
   namespace: gh-ci
 spec:
+  # LoadBalancer (MetalLB) rather than ClusterIP: the ARC runners do NOT run in
+  # this cluster, so they reach the daemon via the LAN VIP MetalLB assigns.
+  # BuildKit's TCP endpoint is unauthenticated - acceptable on the private LAN,
+  # but do not expose this VIP beyond it.
+  type: LoadBalancer
   selector:
     app: buildkitd
   ports:
