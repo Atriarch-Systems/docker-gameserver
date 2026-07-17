@@ -53,9 +53,11 @@ spec:
     metadata:
       labels:
         app: buildkitd
-      annotations:
-        container.apparmor.security.beta.kubernetes.io/buildkitd: unconfined
     spec:
+      # fsGroup chowns the PVC to the rootless uid/gid - without it the ext4
+      # volume mounts root-owned and buildkitd crashloops on "permission denied".
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: buildkitd
           image: moby/buildkit:v0.17.2-rootless
@@ -69,6 +71,8 @@ spec:
           # entries below are what rootless needs (no full privileged: true).
           securityContext:
             seccompProfile:
+              type: Unconfined
+            appArmorProfile:
               type: Unconfined
             runAsUser: 1000
             runAsGroup: 1000
