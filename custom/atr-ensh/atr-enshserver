@@ -198,22 +198,38 @@ fn_start() {
   echo "${GAMENAME} started (PID: $(cat "${PIDFILE}"), Port: ${game_port}, Query: ${query_port})"
 }
 
+# Cmdline pattern of the real server process. The PID file records the forked
+# proton launcher; the Windows server runs as its child under wine — killing
+# only the recorded PID can orphan the game (which then autosaves over a
+# just-restored world when it finally dies).
+readonly PROC_PATTERN="enshrouded_server\.exe"
+
+kill_stragglers() {
+  pkill -TERM -f "${PROC_PATTERN}" 2>/dev/null || return 0
+  local i
+  for i in 1 2 3 4 5; do
+    pgrep -f "${PROC_PATTERN}" >/dev/null 2>&1 || return 0
+    sleep 1
+  done
+  pkill -KILL -f "${PROC_PATTERN}" 2>/dev/null || true
+}
+
 fn_stop() {
-  if [ ! -f "${PIDFILE}" ]; then
-    echo "${GAMENAME} is not running"
-    return 0
+  local pid=""
+  if [ -f "${PIDFILE}" ]; then
+    pid="$(cat "${PIDFILE}")"
   fi
 
-  local pid
-  pid="$(cat "${PIDFILE}")"
-
-  if kill -0 "${pid}" 2>/dev/null; then
+  if [ -n "${pid}" ] && kill -0 "${pid}" 2>/dev/null; then
     kill -TERM "${pid}" || true
     sleep 3
     if kill -0 "${pid}" 2>/dev/null; then
       kill -KILL "${pid}" || true
     fi
   fi
+
+  # Sweep children the PID kill missed (proton/wine-spawned server process).
+  kill_stragglers
 
   rm -f "${PIDFILE}"
   echo "${GAMENAME} stopped"
